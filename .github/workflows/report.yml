@@ -1,0 +1,25 @@
+name: Report voli Volotea
+
+on:
+  schedule:
+    - cron: "0 5 * * 1"   # ogni lunedì alle 05:00 UTC (7:00 in Italia d'estate)
+  workflow_dispatch:       # permette di lanciarlo a mano dalla scheda Actions
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python volotea_checker.py
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}

@@ -1,0 +1,75 @@
+# Configurazione del checker voli Volotea
+
+origin = "FLR"            # Firenze Peretola
+horizon_days = 365        # quanto avanti guardare (dal giorno successivo a oggi)
+min_stay_days = 5         # durata minima del soggiorno
+max_stay_days = 10        # durata massima del soggiorno
+top_n = 10                # quante combinazioni mettere nel report
+max_per_destination = 3   # massimo combinazioni per la stessa destinazione (0 = nessun limite)
+passengers = 1            # numero adulti (il prezzo nel report è il totale)
+
+# Fonte dei prezzi: "google" (Google Flights filtrato su Volotea, gratis)
+#                   "apify"  (scraper Volotea su Apify, a pagamento, serve APIFY_TOKEN)
+#                   "mock"   (dati finti, per provare il programma)
+provider = "google"
+
+# Pausa tra una richiesta e l'altra (secondi), per non farsi bloccare
+request_delay_seconds = 2.0
+
+# Cache dei prezzi: evita di richiedere di nuovo lo stesso giorno se già letto da poco
+cache_file = "cache/fares.json"
+cache_hours = 20
+
+# Destinazioni. "weekdays" = giorni in cui la rotta vola (0=lun ... 6=dom).
+# Servono solo a ridurre le richieste; lascia la lista vuota [] per controllare tutti i giorni.
+# Le frequenze delle nuove rotte vengono dagli articoli di settembre 2026.
+[[destinations]]
+code = "SVQ"
+name = "Siviglia"
+weekdays = [0, 4]      # lunedì e venerdì
+
+[[destinations]]
+code = "OVD"
+name = "Oviedo (Asturie)"
+weekdays = [0, 4]      # lunedì e venerdì
+
+[[destinations]]
+code = "EAS"
+name = "San Sebastián"
+weekdays = [0, 3]      # lunedì e giovedì
+
+[[destinations]]
+code = "VLC"
+name = "Valencia"
+weekdays = [1, 5]      # martedì e sabato
+
+[[destinations]]
+code = "BER"
+name = "Berlino"
+weekdays = [1, 5]      # martedì e sabato
+
+[[destinations]]
+code = "SXB"
+name = "Strasburgo"
+weekdays = [2, 6]      # mercoledì e domenica
+
+# Altre rotte Volotea da Firenze (già esistenti): togli il commento per includerle.
+# [[destinations]]
+# code = "CTA"
+# name = "Catania"
+# weekdays = []
+#
+# [[destinations]]
+# code = "PRG"
+# name = "Praga"
+# weekdays = []
+#
+# [[destinations]]
+# code = "LYS"
+# name = "Lione"
+# weekdays = []
+#
+# [[destinations]]
+# code = "HAM"
+# name = "Amburgo"
+# weekdays = []
