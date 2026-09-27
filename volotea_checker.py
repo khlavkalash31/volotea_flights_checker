@@ -14,8 +14,10 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import html
+import io
 import json
 import logging
 import os
@@ -28,6 +30,16 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
 from email.message import EmailMessage
 from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv()
+
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+SMTP_USER = os.getenv("SMTP_USER")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
+MAIL_TO = os.getenv("MAIL_TO", SMTP_USER)
+
+APIFY_TOKEN = os.getenv("APIFY_TOKEN", None)
 
 log = logging.getLogger("volotea")
 
@@ -73,7 +85,7 @@ class Provider:
 
     def __init__(self, cfg: dict):
         self.cfg = cfg
-        self.passengers = int(cfg.get("passengers", 1))
+        self.passengers = int(cfg.get("passengers", 2))
 
     def fetch(self, frm: str, to: str, days: list[date]) -> dict[str, Fare | None]:
         raise NotImplementedError
@@ -121,7 +133,7 @@ class GoogleFlightsProvider(Provider):
             import fast_flights  # noqa: F401
         except ImportError:
             sys.exit("Manca la libreria fast-flights: esegui  pip install -r requirements.txt")
-        self.delay = float(cfg.get("request_delay_seconds", 2.0))
+        self.delay = float(cfg.get("request_delay_seconds", 1.0))
         self.fetcher = _ConsentFetcher()
 
     def _query(self, flights, trip: str):
@@ -336,7 +348,8 @@ def scan(cfg: dict, provider: Provider, cache: FareCache, today: date) -> dict[s
     return result
 
 
-def best_combos(cfg: dict, fares: dict) -> list[Combo]:
+def all_combos(cfg: dict, fares: dict) -> list[Combo]:
+    """Tutte le combinazioni andata+ritorno valide, dalla più economica."""
     names = {d["code"]: d.get("name", d["code"]) for d in cfg["destinations"]}
     lo, hi = int(cfg["min_stay_days"]), int(cfg["max_stay_days"])
     combos = []
@@ -348,7 +361,11 @@ def best_combos(cfg: dict, fares: dict) -> list[Combo]:
                 if ret:
                     combos.append(Combo(code, names[code], out_fare, ret))
     combos.sort(key=lambda c: (c.total, c.outbound.day))
+    return combos
 
+
+def best_combos(cfg: dict, fares: dict) -> list[Combo]:
+    combos = all_combos(cfg, fares)
     cap, top_n = int(cfg.get("max_per_destination", 0)), int(cfg["top_n"])
     picked, per_dest = [], {}
     for c in combos:
@@ -383,6 +400,29 @@ def fmt_eur(v: float) -> str:
     return f"{v:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+TH = "style='text-align:left;padding:6px;border-bottom:2px solid #ccc'"
+
+
+def combos_table_html(cfg: dict, combos: list[Combo], provider: Provider) -> str:
+    rows = []
+    for i, c in enumerate(combos, 1):
+        link = provider.booking_link(cfg["origin"], c.dest_code, c.outbound.day, c.inbound.day)
+        rows.append(
+            "<tr>"
+            f"<td>{i}</td><td><b>{html.escape(c.dest_name)}</b></td>"
+            f"<td>{fmt_day(c.outbound.day)}<br><small>{c.outbound.dep_time}</small></td>"
+            f"<td>{fmt_day(c.inbound.day)}<br><small>{c.inbound.dep_time}</small></td>"
+            f"<td>{c.nights}</td>"
+            f"<td style='text-align:right'><b>{fmt_eur(c.total)}</b><br><small>{fmt_eur(c.outbound.price)} + {fmt_eur(c.inbound.price)}</small></td>"
+            f"<td><a href='{html.escape(link)}'>vedi</a></td>"
+            "</tr>"
+        )
+    return f"""<table style="border-collapse:collapse;font-size:14px" cellpadding="6">
+<tr><th {TH}>#</th><th {TH}>Destinazione</th><th {TH}>Andata</th><th {TH}>Ritorno</th><th {TH}>Notti</th><th {TH}>Prezzo</th><th {TH}></th></tr>
+{''.join(rows) or '<tr><td colspan=7>Nessuna combinazione trovata.</td></tr>'}
+</table>"""
+
+
 def build_report(cfg: dict, combos: list[Combo], per_dest, provider: Provider, today: date) -> tuple[str, str, str]:
     origin = cfg["origin"]
     pax = int(cfg.get("passengers", 1))
@@ -392,22 +432,10 @@ def build_report(cfg: dict, combos: list[Combo], per_dest, provider: Provider, t
     pax_note = "a persona" if pax == 1 else f"totale per {pax} adulti"
 
     lines = [subject, "", f"Prezzi andata+ritorno ({pax_note}), soggiorni di {cfg['min_stay_days']}-{cfg['max_stay_days']} giorni, prossimi {cfg['horizon_days']} giorni.", ""]
-    rows_html = []
     for i, c in enumerate(combos, 1):
-        link = provider.booking_link(origin, c.dest_code, c.outbound.day, c.inbound.day)
         lines.append(
             f"{i:>2}. {c.dest_name:<18} {fmt_day(c.outbound.day)} -> {fmt_day(c.inbound.day)} "
             f"({c.nights} notti)  {fmt_eur(c.total)}  [and. {fmt_eur(c.outbound.price)} + rit. {fmt_eur(c.inbound.price)}]"
-        )
-        rows_html.append(
-            "<tr>"
-            f"<td>{i}</td><td><b>{html.escape(c.dest_name)}</b></td>"
-            f"<td>{fmt_day(c.outbound.day)}<br><small>{c.outbound.dep_time}</small></td>"
-            f"<td>{fmt_day(c.inbound.day)}<br><small>{c.inbound.dep_time}</small></td>"
-            f"<td>{c.nights}</td>"
-            f"<td style='text-align:right'><b>{fmt_eur(c.total)}</b><br><small>{fmt_eur(c.outbound.price)} + {fmt_eur(c.inbound.price)}</small></td>"
-            f"<td><a href='{html.escape(link)}'>vedi</a></td>"
-            "</tr>"
         )
     if not combos:
         lines.append("Nessuna combinazione trovata (controlla i log: forse la fonte dei prezzi non ha risposto).")
@@ -419,28 +447,62 @@ def build_report(cfg: dict, combos: list[Combo], per_dest, provider: Provider, t
         lines.append(f"  - {name}: {txt}")
         dest_html.append(f"<li><b>{html.escape(name)}</b>: {html.escape(txt)}</li>")
 
-    th = "style='text-align:left;padding:6px;border-bottom:2px solid #ccc'"
+    lines += ["", "In allegato le migliori combinazioni per ogni destinazione (CSV e HTML)."]
     body_html = f"""<html><body style="font-family:Arial,sans-serif;color:#222">
 <h2 style="margin-bottom:4px">Voli Volotea da Firenze</h2>
 <p style="margin-top:0;color:#555">Andata e ritorno ({pax_note}), soggiorni di {cfg['min_stay_days']}-{cfg['max_stay_days']} giorni,
 prossimi {cfg['horizon_days']} giorni. Aggiornato al {today.strftime('%d/%m/%Y')}.</p>
-<table style="border-collapse:collapse;font-size:14px" cellpadding="6">
-<tr><th {th}>#</th><th {th}>Destinazione</th><th {th}>Andata</th><th {th}>Ritorno</th><th {th}>Notti</th><th {th}>Prezzo</th><th {th}></th></tr>
-{''.join(rows_html) or '<tr><td colspan=7>Nessuna combinazione trovata.</td></tr>'}
-</table>
+{combos_table_html(cfg, combos, provider)}
 <h3>Miglior prezzo per destinazione</h3><ul>{''.join(dest_html)}</ul>
+<p>In allegato le migliori combinazioni per ogni destinazione: <b>combinazioni.csv</b> (per Excel) e <b>combinazioni.html</b>.</p>
 <p style="color:#888;font-size:12px">Prezzi indicativi (fonte: {provider.name}), bagaglio in stiva escluso. Verifica sempre sul sito Volotea prima di prenotare.</p>
 </body></html>"""
     return subject, "\n".join(lines), body_html
 
 
-def send_email(subject: str, text: str, body_html: str):
-    host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-    port = int(os.environ.get("SMTP_PORT", "465"))
-    user = os.environ.get("SMTP_USER")
-    password = os.environ.get("SMTP_PASSWORD")
-    to = os.environ.get("MAIL_TO", user or "")
-    sender = os.environ.get("MAIL_FROM", user or "")
+def build_attachments(cfg: dict, combos: list[Combo], provider: Provider, today: date) -> dict[str, str]:
+    """Tutte le combinazioni: CSV (separatore ';' e virgola decimale, per Excel in italiano) e HTML per destinazione."""
+    origin = cfg["origin"]
+    num = lambda v: f"{v:.2f}".replace(".", ",")  # noqa: E731
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";")
+    w.writerow(["destinazione", "codice", "andata", "giorno_andata", "ora_andata", "ritorno", "giorno_ritorno", "ora_ritorno",
+                "notti", "prezzo_andata", "prezzo_ritorno", "totale", "link"])
+    for c in combos:
+        od, rd = date.fromisoformat(c.outbound.day), date.fromisoformat(c.inbound.day)
+        w.writerow([c.dest_name, c.dest_code, c.outbound.day, WEEKDAYS_IT[od.weekday()], c.outbound.dep_time,
+                    c.inbound.day, WEEKDAYS_IT[rd.weekday()], c.inbound.dep_time, c.nights,
+                    num(c.outbound.price), num(c.inbound.price), num(c.total),
+                    provider.booking_link(origin, c.dest_code, c.outbound.day, c.inbound.day)])
+
+    pax = int(cfg.get("passengers", 1))
+    pax_note = "a persona" if pax == 1 else f"totale per {pax} adulti"
+    sections, index = [], []
+    for d in cfg["destinations"]:
+        mine = [c for c in combos if c.dest_code == d["code"]]
+        name = html.escape(d.get("name", d["code"]))
+        best = f" — da {fmt_eur(mine[0].total)}" if mine else " — nessun volo trovato"
+        index.append(f"<li><a href='#{d['code']}'>{name}</a>{best} ({len(mine)} combinazioni)</li>")
+        sections.append(f"<h2 id='{d['code']}'>{name}</h2>" + (combos_table_html(cfg, mine, provider) if mine else "<p>Nessuna combinazione trovata.</p>"))
+    page = f"""<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Voli Volotea da Firenze</title></head>
+<body style="font-family:Arial,sans-serif;color:#222;max-width:900px;margin:auto;padding:16px">
+<h1 style="margin-bottom:4px">Voli Volotea da Firenze — migliori combinazioni per destinazione</h1>
+<p style="margin-top:0;color:#555">Andata e ritorno ({pax_note}), soggiorni di {cfg['min_stay_days']}-{cfg['max_stay_days']} giorni,
+prossimi {cfg['horizon_days']} giorni. Aggiornato al {today.strftime('%d/%m/%Y')}. Ogni destinazione è ordinata dal prezzo più basso.</p>
+<ul>{''.join(index)}</ul>
+{''.join(sections)}
+<p style="color:#888;font-size:12px">Prezzi indicativi (fonte: {provider.name}), bagaglio in stiva escluso.</p>
+</body></html>"""
+    return {"combinazioni.csv": "\ufeff" + buf.getvalue(), "combinazioni.html": page}
+
+
+def send_email(subject: str, text: str, body_html: str, attachments: dict[str, str] | None = None):
+    host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    port = int(os.getenv("SMTP_PORT", "465"))
+    user = os.getenv("SMTP_USER")
+    password = os.getenv("SMTP_PASSWORD")
+    to = os.getenv("MAIL_TO", user or "")
+    sender = os.getenv("MAIL_FROM", user or "")
     if not (user and password and to):
         sys.exit("Configura SMTP_USER, SMTP_PASSWORD e MAIL_TO (vedi README)")
 
@@ -448,6 +510,9 @@ def send_email(subject: str, text: str, body_html: str):
     msg["Subject"], msg["From"], msg["To"] = subject, sender, to
     msg.set_content(text)
     msg.add_alternative(body_html, subtype="html")
+    for fname, content in (attachments or {}).items():
+        subtype = "csv" if fname.endswith(".csv") else "html"
+        msg.add_attachment(content.encode("utf-8"), maintype="text", subtype=subtype, filename=fname)
 
     if port == 465:
         with smtplib.SMTP_SSL(host, port, timeout=60) as s:
@@ -487,14 +552,23 @@ def main(argv=None):
     fares = scan(cfg, provider, cache, today)
     combos = best_combos(cfg, fares)
     subject, text, body_html = build_report(cfg, combos, cheapest_per_destination(cfg, fares), provider, today)
+    att_cap, per_dest_count, att_combos = int(cfg.get("attachment_max_per_destination", 0)), {}, []
+    for c in all_combos(cfg, fares):
+        per_dest_count[c.dest_code] = per_dest_count.get(c.dest_code, 0) + 1
+        if not att_cap or per_dest_count[c.dest_code] <= att_cap:
+            att_combos.append(c)
+    attachments = build_attachments(cfg, att_combos, provider, today)
 
     if args.dry_run:
         print("\n" + text)
         out = args.config.parent / "report.html"
         out.write_text(body_html)
         log.info("Report HTML salvato in %s", out)
+        for fname, content in attachments.items():
+            (args.config.parent / fname).write_text(content, encoding="utf-8")
+            log.info("Allegato salvato in %s", args.config.parent / fname)
     else:
-        send_email(subject, text, body_html)
+        send_email(subject, text, body_html, attachments)
 
 
 if __name__ == "__main__":

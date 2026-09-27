@@ -1,8 +1,8 @@
 # Checker voli Volotea da Firenze
 
 Cerca i voli Volotea diretti da Firenze (FLR) verso le destinazioni in `config.toml`
-per i prossimi 365 giorni, combina andata e ritorno con soggiorni di 5-10 giorni
-e invia per email le 10 combinazioni più economiche (max 3 per destinazione),
+per i prossimi 365 giorni, combina andata e ritorno con soggiorni di 5-7 giorni
+e invia per email le combinazioni più economiche (con tutte le combinazioni in allegato CSV e HTML),
 più il miglior prezzo per ogni destinazione.
 
 ## Da dove arrivano i prezzi
@@ -26,7 +26,7 @@ I risultati restano in cache per 20 ore, quindi se interrompi e rilanci riparte 
 ```bash
 pip install -r requirements.txt
 python volotea_checker.py --provider mock --dry-run   # prova senza rete
-python volotea_checker.py --dry-run                   # prezzi veri, stampa il report e salva report.html
+python volotea_checker.py --dry-run                   # prezzi veri, stampa il report e salva report.html + combinazioni.csv/.html
 ```
 
 ## Email

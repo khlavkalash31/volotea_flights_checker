@@ -3,10 +3,11 @@
 origin = "FLR"            # Firenze Peretola
 horizon_days = 365        # quanto avanti guardare (dal giorno successivo a oggi)
 min_stay_days = 5         # durata minima del soggiorno
-max_stay_days = 10        # durata massima del soggiorno
-top_n = 10                # quante combinazioni mettere nel report
-max_per_destination = 3   # massimo combinazioni per la stessa destinazione (0 = nessun limite)
-passengers = 1            # numero adulti (il prezzo nel report è il totale)
+max_stay_days = 7         # durata massima del soggiorno
+top_n = 30                # quante combinazioni nel corpo della mail
+attachment_max_per_destination = 50  # combinazioni per destinazione negli allegati CSV/HTML (0 = tutte)
+max_per_destination = 6   # massimo combinazioni per la stessa destinazione (0 = nessun limite)
+passengers = 2            # numero adulti (il prezzo nel report è il totale)
 
 # Fonte dei prezzi: "google" (Google Flights filtrato su Volotea, gratis)
 #                   "apify"  (scraper Volotea su Apify, a pagamento, serve APIFY_TOKEN)
@@ -14,7 +15,7 @@ passengers = 1            # numero adulti (il prezzo nel report è il totale)
 provider = "google"
 
 # Pausa tra una richiesta e l'altra (secondi), per non farsi bloccare
-request_delay_seconds = 2.0
+request_delay_seconds = 1.5
 
 # Cache dei prezzi: evita di richiedere di nuovo lo stesso giorno se già letto da poco
 cache_file = "cache/fares.json"
@@ -28,10 +29,10 @@ code = "SVQ"
 name = "Siviglia"
 weekdays = [0, 4]      # lunedì e venerdì
 
-[[destinations]]
-code = "OVD"
-name = "Oviedo (Asturie)"
-weekdays = [0, 4]      # lunedì e venerdì
+#[[destinations]]
+#code = "OVD"
+#name = "Oviedo (Asturie)"
+#weekdays = [0, 4]      # lunedì e venerdì
 
 [[destinations]]
 code = "EAS"
@@ -48,28 +49,28 @@ code = "BER"
 name = "Berlino"
 weekdays = [1, 5]      # martedì e sabato
 
-[[destinations]]
-code = "SXB"
-name = "Strasburgo"
-weekdays = [2, 6]      # mercoledì e domenica
+#[[destinations]]
+#code = "SXB"
+#name = "Strasburgo"
+#weekdays = [2, 6]      # mercoledì e domenica
 
 # Altre rotte Volotea da Firenze (già esistenti): togli il commento per includerle.
-# [[destinations]]
-# code = "CTA"
-# name = "Catania"
-# weekdays = []
-#
-# [[destinations]]
-# code = "PRG"
-# name = "Praga"
-# weekdays = []
-#
-# [[destinations]]
-# code = "LYS"
-# name = "Lione"
-# weekdays = []
-#
-# [[destinations]]
-# code = "HAM"
-# name = "Amburgo"
-# weekdays = []
+[[destinations]]
+code = "CTA"
+name = "Catania"
+weekdays = []            # vola quasi tutti i giorni
+
+[[destinations]]
+code = "PRG"
+name = "Praga"
+weekdays = [0, 3, 4, 6]   # lun e ven da novembre; gio e dom fino a fine ottobre 2026
+
+#[[destinations]]
+#code = "LYS"
+#name = "Lione"
+#weekdays = []
+
+#[[destinations]]
+#code = "HAM"
+#name = "Amburgo"
+#weekdays = []

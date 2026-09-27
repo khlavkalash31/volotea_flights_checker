@@ -46,6 +46,11 @@ class CombosTest(unittest.TestCase):
         subject, text, body = v.build_report(CFG, combos, v.cheapest_per_destination(CFG, fares), provider, date(2026, 9, 26))
         self.assertIn("Siviglia", text)
         self.assertIn("<table", body)
+        att = v.build_attachments(CFG, v.all_combos(CFG, fares), provider, date(2026, 9, 26))
+        csv_lines = att["combinazioni.csv"].lstrip("\ufeff").splitlines()
+        self.assertEqual(len(csv_lines) - 1, len(v.all_combos(CFG, fares)))
+        self.assertGreater(len(csv_lines) - 1, len(combos))  # gli allegati hanno tutte le combinazioni
+        self.assertIn("id='SVQ'", att["combinazioni.html"])
 
 
 class GoogleParsingTest(unittest.TestCase):
