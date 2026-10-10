@@ -33,8 +33,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
 
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+SMTP_HOST = (os.getenv("SMTP_HOST") or "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT") or "465")
 SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 MAIL_TO = os.getenv("MAIL_TO", SMTP_USER)
@@ -497,8 +497,8 @@ prossimi {cfg['horizon_days']} giorni. Aggiornato al {today.strftime('%d/%m/%Y')
 
 
 def send_email(subject: str, text: str, body_html: str, attachments: dict[str, str] | None = None):
-    host = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    port = int(os.getenv("SMTP_PORT", "465"))
+    host = (os.getenv("SMTP_HOST") or "smtp.gmail.com")
+    port = int(os.getenv("SMTP_PORT") or "465")
     user = os.getenv("SMTP_USER")
     password = os.getenv("SMTP_PASSWORD")
     to = os.getenv("MAIL_TO", user or "")
