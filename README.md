@@ -18,7 +18,7 @@ semplice viene bloccato. Per questo il programma ha tre "provider", scelti con
 | `mock`   | prezzi finti, per provare il programma | gratis |
 
 Con `google` una scansione annuale fa circa 1.250 richieste (solo nei giorni in cui
-le rotte volano, vedi `weekdays`), con 2 secondi di pausa: circa 40-60 minuti.
+le rotte volano, vedi `weekdays`), fatte 4 alla volta in parallelo (`concurrency` in `config.toml`): circa 10-15 minuti.
 I risultati restano in cache per 20 ore, quindi se interrompi e rilanci riparte da dove era.
 
 ## Installazione (Python 3.11 o superiore)

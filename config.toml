@@ -16,6 +16,8 @@ provider = "google"
 
 # Pausa tra una richiesta e l'altra (secondi), per non farsi bloccare
 request_delay_seconds = 1.5
+# Richieste in parallelo verso Google (1 = una alla volta). Se compaiono molti errori, abbassalo.
+concurrency = 4
 
 # Cache dei prezzi: evita di richiedere di nuovo lo stesso giorno se già letto da poco
 cache_file = "cache/fares.json"

@@ -23,9 +23,11 @@ import logging
 import os
 import smtplib
 import sys
+import threading
 import time
 import tomllib
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta
 from email.message import EmailMessage
@@ -134,7 +136,8 @@ class GoogleFlightsProvider(Provider):
         except ImportError:
             sys.exit("Manca la libreria fast-flights: esegui  pip install -r requirements.txt")
         self.delay = float(cfg.get("request_delay_seconds", 1.0))
-        self.fetcher = _ConsentFetcher()
+        self.concurrency = int(cfg.get("concurrency", 4))
+        self._local = threading.local()  # un client Google per ogni thread
 
     def _query(self, flights, trip: str):
         from fast_flights import Passengers, create_query
@@ -149,41 +152,51 @@ class GoogleFlightsProvider(Provider):
         )
 
     def fetch(self, frm, to, days):
+        # Più richieste in parallelo (ognuna con il suo client e la sua pausa):
+        # con concurrency = 4 la scansione è circa 4 volte più veloce.
+        out: dict[str, Fare | None] = {}
+        workers = max(1, min(self.concurrency, len(days)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            for day, found, fare in pool.map(lambda d: self._fetch_day(frm, to, d), days):
+                if found:
+                    out[day] = fare
+        return out
+
+    def _fetch_day(self, frm, to, d: date) -> tuple[str, bool, Fare | None]:
+        """Ritorna (giorno, letto_correttamente, tariffa più economica o None)."""
         from fast_flights import FlightQuery, FlightsNotFound, get_flights
 
-        out: dict[str, Fare | None] = {}
-        for i, d in enumerate(days):
-            if i:
-                time.sleep(self.delay)
-            q = self._query([FlightQuery(date=d.isoformat(), from_airport=frm, to_airport=to, airlines=["V7"])], "one-way")
-            try:
-                results = get_flights(q, integration=self.fetcher)
-            except FlightsNotFound:
-                out[d.isoformat()] = None
+        fetcher = getattr(self._local, "fetcher", None)
+        if fetcher is None:
+            fetcher = self._local.fetcher = _ConsentFetcher()
+        else:
+            time.sleep(self.delay)  # pausa tra le richieste dello stesso client
+        q = self._query([FlightQuery(date=d.isoformat(), from_airport=frm, to_airport=to, airlines=["V7"])], "one-way")
+        try:
+            results = get_flights(q, integration=fetcher)
+        except FlightsNotFound:
+            return d.isoformat(), True, None
+        except TypeError:
+            # fast-flights 3.1 va in errore su payload[3] = None quando quel giorno non ci sono voli
+            return d.isoformat(), True, None
+        except Exception as e:  # rete, blocco temporaneo, pagina cambiata...
+            log.warning("  %s %s->%s: errore (%s), riprovo al prossimo giro", d, frm, to, e)
+            return d.isoformat(), False, None  # non salvato in cache: verrà richiesto di nuovo
+        best = None
+        for f in results:
+            is_volotea = any("volotea" in a.lower() or a.upper() == "V7" for a in f.airlines)
+            if not is_volotea or len(f.flights) != 1 or not f.price:
                 continue
-            except TypeError:
-                # fast-flights 3.1 va in errore su payload[3] = None quando quel giorno non ci sono voli
-                out[d.isoformat()] = None
-                continue
-            except Exception as e:  # rete, blocco temporaneo, pagina cambiata...
-                log.warning("  %s %s->%s: errore (%s), riprovo al prossimo giro", d, frm, to, e)
-                continue  # non salvato in cache: verrà richiesto di nuovo
-            best = None
-            for f in results:
-                is_volotea = any("volotea" in a.lower() or a.upper() == "V7" for a in f.airlines)
-                if not is_volotea or len(f.flights) != 1 or not f.price:
-                    continue
-                if best is None or f.price < best.price:
-                    leg = f.flights[0]
-                    best = Fare(
-                        day=d.isoformat(),
-                        price=float(f.price),
-                        dep_time="%02d:%02d" % leg.departure.time,
-                        arr_time="%02d:%02d" % leg.arrival.time,
-                    )
-            out[d.isoformat()] = best
-            log.debug("  %s %s->%s: %s", d, frm, to, best.price if best else "-")
-        return out
+            if best is None or f.price < best.price:
+                leg = f.flights[0]
+                best = Fare(
+                    day=d.isoformat(),
+                    price=float(f.price),
+                    dep_time="%02d:%02d" % leg.departure.time,
+                    arr_time="%02d:%02d" % leg.arrival.time,
+                )
+        log.debug("  %s %s->%s: %s", d, frm, to, best.price if best else "-")
+        return d.isoformat(), True, best
 
     def booking_link(self, frm, to, out_day, ret_day):
         from fast_flights import FlightQuery
