@@ -1,7 +1,7 @@
 # Checker voli Volotea da Firenze
 
 Cerca i voli Volotea diretti da Firenze (FLR) verso le destinazioni in `config.toml`
-per i prossimi 365 giorni, combina andata e ritorno con soggiorni di 5-7 giorni
+per i prossimi 365 giorni, combina andata e ritorno con soggiorni di 3-7 notti
 e invia per email le combinazioni più economiche (con tutte le combinazioni in allegato CSV e HTML),
 più il miglior prezzo per ogni destinazione.
 

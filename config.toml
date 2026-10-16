@@ -2,7 +2,7 @@
 
 origin = "FLR"            # Firenze Peretola
 horizon_days = 365        # quanto avanti guardare (dal giorno successivo a oggi)
-min_stay_days = 5         # durata minima del soggiorno
+min_stay_days = 3         # durata minima del soggiorno (notti)
 max_stay_days = 7         # durata massima del soggiorno
 top_n = 30                # quante combinazioni nel corpo della mail
 attachment_max_per_destination = 50  # combinazioni per destinazione negli allegati CSV/HTML (0 = tutte)
