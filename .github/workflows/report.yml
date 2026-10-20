@@ -1,8 +1,9 @@
 name: Report voli Volotea
 
 on:
-  schedule:
-    - cron: "0 5 * * 1"   # ogni lunedì alle 05:00 UTC (7:00 in Italia d'estate)
+  # Pianificazione disattivata: il report settimanale parte dal timer systemd sul PC.
+  # schedule:
+  #   - cron: "0 5 * * 1"   # ogni lunedì alle 05:00 UTC (7:00 in Italia d'estate)
   workflow_dispatch:       # permette di lanciarlo a mano dalla scheda Actions
 
 jobs:
